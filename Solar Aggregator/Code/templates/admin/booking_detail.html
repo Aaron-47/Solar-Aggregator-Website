@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Order #{{ b['id'] }} - Backend{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('admin_bookings') }}">&larr; All orders</a></p>
+
+<div class="page-head">
+  <div>
+    <h1>Order #{{ b['id'] }} <span class="badge {{ status_tone(b['status']) }}">{{ status_label(b['status']) }}</span></h1>
+    <p class="muted">{{ offer['title'] }} &middot; booked {{ fmt_dt(b['created_at']) }} &middot; last update {{ fmt_dt(b['updated_at']) }}</p>
+  </div>
+  <div class="actions">
+    {% if b['status'] == 'PAID' %}
+      <form method="post" action="{{ url_for('admin_fulfill', booking_id=b['id']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary" type="submit">Mark fulfilled</button>
+      </form>
+    {% endif %}
+    {% if b['status'] not in ('PAID','FULFILLED','CANCELLED') %}
+      <form method="post" action="{{ url_for('admin_cancel', booking_id=b['id']) }}"
+            onsubmit="return confirm('Cancel this order and release its capacity?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="reason" value="Cancelled by admin.">
+        {% if penalty['applies'] %}
+          <label class="check small">
+            <input type="checkbox" name="waive_fee" value="1"> Waive the restocking fee ({{ fmt_inr(penalty['fee']) }})
+          </label>
+        {% endif %}
+        <button class="btn btn-danger" type="submit">Cancel order</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="detail">
+  <section>
+    <div class="card">
+      <h3>Requirement</h3>
+      <table class="table">
+        <thead><tr><th>Project / company</th><th>Quantity</th><th>Notes</th></tr></thead>
+        <tbody>
+        {% for it in items %}
+          <tr><td><strong>{{ it['project_name'] }}</strong></td><td>{{ '%g'|format(it['mw']) }} MW</td><td class="muted">{{ it['notes'] or '-' }}</td></tr>
+        {% endfor %}
+        <tr class="sum"><td>Total</td><td><strong>{{ '%g'|format(b['total_mw']) }} MW</strong></td><td></td></tr>
+        </tbody>
+      </table>
+      {% if not b['price_locked'] %}
+        <div class="callout warn">Price not locked yet - the buyer's capacity is on hold.</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Buyer (from the public booking form)</h3>
+      <dl class="facts wide">
+        <dt>Company</dt><dd><strong>{{ b['company'] }}</strong></dd>
+        <dt>Contact</dt><dd>{{ b['contact'] }}{% if b['phone'] %} &middot; {{ b['phone'] }}{% endif %}</dd>
+        <dt>Email</dt><dd class="mono">{{ b['email'] }}</dd>
+        <dt>Tracking code</dt><dd class="mono">{{ b['token'] }}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>Timeline (all events)</h3>
+      <ul class="timeline">
+        {% for e in events %}
+        <li>
+          <span class="dot {{ status_tone(b['status']) if loop.first else ('muted' if e['internal'] else 'info') }}"></span>
+          <div>
+            <strong>{{ e['event']|replace('_',' ')|title }}</strong>
+            {% if e['internal'] %}<span class="badge muted">internal</span>{% endif %}
+            <p>{{ e['message'] }}</p>
+            <span class="muted small">{{ fmt_dt(e['created_at']) }} &middot; {{ e['actor'] }}</span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Rebates <span class="muted small">(dynamic pricing - granted later)</span></h3>
+      {% if b['rebate_applied'] %}
+        <div class="callout info">This order used <strong>{{ fmt_inr(b['rebate_applied']) }}</strong>
+          of rebate credit from an earlier slot.</div>
+      {% endif %}
+      {% if rebates %}
+        <table class="table">
+          <thead><tr><th>Granted</th><th>%</th><th>Amount</th><th>Status</th><th>Note</th></tr></thead>
+          <tbody>
+          {% for r in rebates %}
+            <tr>
+              <td>{{ fmt_dt(r['created_at']) }}</td>
+              <td>{{ '%g'|format(r['pct']) }}%</td>
+              <td>{{ fmt_inr(r['amount']) }}</td>
+              <td><span class="badge {{ 'ok' if r['status'] == 'AVAILABLE' else ('info' if r['status'] == 'APPLIED' else 'muted') }}">{{ r['status'] }}</span></td>
+              <td class="muted small">{{ r['note'] or '-' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted small">No rebate granted on this order yet.</p>
+      {% endif %}
+
+      {% if b['status'] in ('PAID','FULFILLED') %}
+        <hr class="sep">
+        <h4>Grant a rebate</h4>
+        <form method="post" action="{{ url_for('admin_grant_rebate', booking_id=b['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="row2">
+            <div>
+              <label>Rebate %</label>
+              <input type="number" name="pct" step="0.1" min="0.1"
+                     value="{{ '%g'|format(offer['rebate_pct'] or 2) }}" required>
+            </div>
+            <div>
+              <label>Note</label>
+              <input type="text" name="note" placeholder="e.g. volume bonus for the December pool">
+            </div>
+          </div>
+          <p class="small muted">On {{ fmt_inr(b['amount']) }} this is
+            {{ fmt_inr((b['amount'] or 0) * (offer['rebate_pct'] or 2) / 100) }}.
+            The credit is usable against the buyer's next booking with the same email.</p>
+          <button class="btn btn-primary btn-block" type="submit">Grant rebate</button>
+        </form>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Cancellation policy</h3>
+      <dl class="facts wide">
+        <dt>Slot date</dt><dd>{{ fmt_dt(offer['delivery_date'], false) }}</dd>
+        <dt>Fee window</dt><dd>{{ offer['penalty_days'] }} day{{ 's' if offer['penalty_days'] != 1 }} before delivery</dd>
+        <dt>Restocking fee</dt><dd>{{ '%g'|format(offer['restocking_fee_pct']) }}%</dd>
+        <dt>Applies now</dt><dd>
+          {% if penalty['applies'] %}<span class="badge warn">{{ fmt_inr(penalty['fee']) }}</span>
+          {% else %}<span class="badge muted">no</span>{% endif %}
+          <span class="muted small">{{ penalty['reason'] }}</span></dd>
+      </dl>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card sticky">
+      <h3>Price lock</h3>
+      {% if not b['price_locked'] and b['status'] not in ('CANCELLED','PAID','FULFILLED','BLOCK_EXPIRED') %}
+        <form method="post" action="{{ url_for('admin_lock_price', booking_id=b['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label>Lock price (&#8377; per watt)</label>
+          <input type="number" name="unit_price_watt" step="0.01" min="0.01" required
+                 value="{{ '%.2f'|format(price) }}">
+          <p class="small muted">Published {{ '%.2f'|format(offer['price_per_watt']) }} &#8377;/W
+            {%- if discount %} &middot; live volume price {{ '%.2f'|format(price) }} &#8377;/W (-{{ '%g'|format(discount) }}%){% endif %}.</p>
+          {% if b['payment_mode'] == 'upi_block' and mandate and mandate['status'] == 'ACTIVE' %}
+            <p class="small muted">Blocked: {{ fmt_inr(mandate['blocked_amount']) }}.
+              Locked value must not exceed it (a UPI debit can never exceed the block).</p>
+          {% endif %}
+          <label>Internal note (optional)</label>
+          <input type="text" name="note" placeholder="e.g. price approved by management">
+          <button class="btn btn-primary btn-block" type="submit">Lock price</button>
+        </form>
+      {% else %}
+        <dl class="facts wide">
+          {% if b['unit_price_watt'] is not none %}
+            <dt>Locked price</dt><dd><strong>{{ '%.2f'|format(b['unit_price_watt']) }} &#8377;/W</strong></dd>
+            <dt>Order value</dt><dd><strong>{{ fmt_inr(b['amount']) }}</strong></dd>
+          {% else %}
+            <dt>Price</dt><dd class="muted">Never locked - no price was committed for this order.</dd>
+          {% endif %}
+        </dl>
+      {% endif %}
+
+      <hr class="sep">
+      <h3>Payment</h3>
+      <dl class="facts wide">
+        <dt>Path</dt><dd>{{ 'UPI block (sandbox)' if b['payment_mode'] == 'upi_block' else 'RTGS/NEFT/LC' }}</dd>
+        {% if mandate %}
+          <dt>Mandate</dt><dd class="mono">{{ mandate['psp_ref'] }}</dd>
+          <dt>Block status</dt><dd><span class="badge {{ 'ok' if mandate['status'] == 'ACTIVE' else ('warn' if mandate['status'] == 'PENDING_APPROVAL' else 'muted') }}">{{ mandate['status'].replace('_',' ') }}</span></dd>
+          <dt>Blocked</dt><dd>{{ fmt_inr(mandate['blocked_amount']) }}</dd>
+          <dt>VPA</dt><dd class="mono">{{ mandate['customer_vpa'] or '-' }}</dd>
+          <dt>Valid to</dt><dd>{{ fmt_dt(mandate['valid_to'], false) }}</dd>
+        {% endif %}
+        {% if b['payment_mode'] == 'bank' %}
+          <dt>Reference</dt><dd class="mono">{{ b['payment_ref'] or '-' }}</dd>
+        {% endif %}
+      </dl>
+
+      <div class="stack">
+        {% if b['status'] == 'AWAITING_BANK_VERIFY' %}
+          <form method="post" action="{{ url_for('admin_verify_bank', booking_id=b['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-primary btn-block" type="submit">Verify transfer &amp; mark paid</button>
+          </form>
+        {% endif %}
+        {% if b['status'] == 'PAYMENT_DUE' and b['payment_mode'] == 'upi_block' %}
+          <form method="post" action="{{ url_for('admin_debit', booking_id=b['id']) }}"
+                onsubmit="return confirm('Execute the debit against the buyer block now?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-primary btn-block" type="submit">Execute debit now</button>
+          </form>
+          <p class="small muted">Auto-runs on the slot date ({{ fmt_dt(offer['delivery_date'], false) }}) from the maintenance sweep.</p>
+        {% endif %}
+      </div>
+
+      {% if debits %}
+        <hr class="sep">
+        <h4>Debits</h4>
+        <ul class="plain small">
+          {% for d in debits %}
+            <li>{{ fmt_dt(d['attempted_at']) }} &middot; {{ fmt_inr(d['amount']) }} &middot;
+              <span class="badge {{ 'ok' if d['status'] == 'SUCCESS' else 'bad' }}">{{ d['status'] }}</span>
+              <span class="mono muted">{{ d['psp_txn_ref'] }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if mandate %}
+        <hr class="sep">
+        <h4>Mandate events (audit trail)</h4>
+        <ul class="plain small">
+          {% for e in m_events %}
+            <li>{{ fmt_dt(e['received_at']) }} &middot; <strong>{{ e['event_type'] }}</strong>
+              <br><span class="muted">{{ e['payload'] }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3>Internal note</h3>
+      <form method="post" action="{{ url_for('admin_note', booking_id=b['id']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <textarea name="note" rows="3" placeholder="Visible to admins only">{{ b['admin_note'] }}</textarea>
+        <button class="btn btn-ghost btn-sm" type="submit">Save note</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Audit trail</h3>
+      {% if audit_rows %}
+        <ul class="plain small">
+          {% for a in audit_rows %}
+            <li>{{ fmt_dt(a['created_at']) }} &middot; <strong>{{ a['event'] }}</strong><br>
+              <span class="muted">{{ a['message'] }}</span>
+              <span class="muted"> &middot; {{ a['actor'] }}{% if a['ip'] %} ({{ a['ip'] }}){% endif %}</span></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted small">No audit entries yet.</p>
+      {% endif %}
+      <a class="btn btn-ghost btn-sm btn-block" href="{{ url_for('admin_audit', q='#' ~ b['id']) }}">Open the full audit trail</a>
+    </div>
+  </aside>
+</div>
+{% endblock %}

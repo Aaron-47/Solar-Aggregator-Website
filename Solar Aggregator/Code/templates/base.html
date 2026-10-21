@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Solar Aggregator{% endblock %}</title>
+  <meta name="description" content="Book solar module slots at pooled bulk prices. Limited MW per month - lock your price now, pay on the slot date.">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="{{ url_for('index') }}">&#9728; Solar<span>Agg</span></a>
+    <nav>
+      <a href="{{ url_for('index') }}">Open slots</a>
+      <a href="{{ url_for('capacity_dashboard') }}">Capacity</a>
+      <a href="{{ url_for('track') }}">Track order</a>
+      {% if current_user and current_user['role'] == 'admin' %}
+        <a href="{{ url_for('admin_dashboard') }}">Backend</a>
+        <a href="{{ url_for('admin_offers') }}">Offers</a>
+        <a href="{{ url_for('admin_bookings') }}">All orders</a>
+        <a href="{{ url_for('admin_waitlist') }}">Waitlist</a>
+        <a href="{{ url_for('admin_rebates') }}">Rebates</a>
+        <a href="{{ url_for('admin_audit') }}">Audit</a>
+        <a href="{{ url_for('admin_settings') }}">Settings</a>
+      {% endif %}
+    </nav>
+    <div class="auth">
+      {% if current_user %}
+        <span class="who">{{ current_user['company'] }}</span>
+        <a class="btn btn-ghost" href="{{ url_for('logout') }}">Log out</a>
+      {% else %}
+        <a class="btn btn-ghost" href="{{ url_for('admin_login') }}">Admin</a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}
+      <div class="flash flash-{{ cat }}">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <p>Solar module demand aggregation &mdash; pooled bulk orders, published slots, fixed cut-offs.
+       Buyer funds are earmarked with a UPI block (sandbox) or verified via RTGS/NEFT/LC.</p>
+    <p class="muted">Suppliers are classified as Tier 1 / Tier 2. Quantities from {{ '%g'|format(min_booking_mw) }} MW upwards are accepted
+       &mdash; the pool target is a goal, not a gate. Rebates, where granted, are credited after the slot date.</p>
+    <p class="muted">&copy; 2026 Solar Aggregator. Offers are subject to supplier confirmation.</p>
+  </div>
+</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

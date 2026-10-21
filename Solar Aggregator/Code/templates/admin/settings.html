@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Settings - Backend{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('admin_dashboard') }}">&larr; Backend</a></p>
+<div class="auth-box wide-box">
+  <h1>Marketplace settings</h1>
+  <p class="muted">These values drive the public site. Existing bookings keep the terms they were
+    created with.</p>
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label>Minimum booking (MW) &mdash; hard floor per order</label>
+    <input type="number" name="min_booking_mw" step="0.005" min="0.001"
+           value="{{ settings['min_booking_mw'] }}" required>
+    <p class="small muted">The old 2 MW pool minimum is gone. Anything from this size upwards is
+      accepted and pooled; the pool target on each slot is a soft goal, not a gate.</p>
+
+    <label>Restocking fee % (late cancellation)</label>
+    <input type="number" name="restocking_fee_pct" step="0.1" min="0"
+           value="{{ settings['restocking_fee_pct'] }}" required>
+    <p class="small muted">Default for new slots. A slot can override it.</p>
+
+    <label>Penalty window (days before delivery)</label>
+    <input type="number" name="penalty_window_days" step="1" min="0"
+           value="{{ settings['penalty_window_days'] }}" required>
+    <p class="small muted">Cancelling inside this window costs the restocking fee; earlier
+      cancellations are free.</p>
+
+    <label>Default rebate % (granted later)</label>
+    <input type="number" name="default_rebate_pct" step="0.1" min="0"
+           value="{{ settings['default_rebate_pct'] }}" required>
+    <p class="small muted">Used as the starting point when granting a rebate. Rebates are credited
+      after the slot date, never at booking time.</p>
+
+    <label class="check">
+      <input type="checkbox" name="allow_current_account_blocks" value="1"
+        {{ 'checked' if settings['allow_current_account_blocks'] == '1' else '' }}>
+      Allow UPI blocks on company current accounts
+    </label>
+    <p class="small muted">Research item from the meeting: a UPI block (OTM / e-mandate) is a
+      <em>bank product</em>, and each bank has its own rules on whether a company
+      <em>current</em> account can carry a third-party merchant block - so the answer is
+      bank-by-bank, not universal. Leave this on until the acquiring bank confirms in writing
+      (see <code>docs/RESEARCH_NOTES.md</code>). Turn it off to remove the UPI block path for
+      company buyers - they then have to use RTGS/NEFT/LC, which works from any account.</p>
+
+    <label>Volume price ladder (dynamic pricing, JSON)</label>
+    <textarea name="pricing_ladder" rows="6">{{ settings['pricing_ladder'] }}</textarea>
+    <p class="small muted">Each step is <code>{"min_pct": fill %, "discount_pct": discount %}</code>.
+      The highest step the pool has passed applies to the published price. Current ladder:
+      {% for min_pct, disc in pricing_ladder %}from {{ '%g'|format(min_pct) }}% filled &minus;{{ '%g'|format(disc) }}%{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+
+    <button class="btn btn-primary" type="submit">Save settings</button>
+    <a class="btn btn-ghost" href="{{ url_for('admin_dashboard') }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

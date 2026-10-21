@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Admin login - Solar Aggregator{% endblock %}
+{% block content %}
+<div class="auth-box">
+  <h1>Backend login</h1>
+  <p class="muted">Aggregator staff only. This account sees every offer, booking and payment.</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Admin email</label>
+    <input type="email" name="email" required autofocus>
+    <label>Password</label>
+    <input type="password" name="password" required>
+    <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+  </form>
+  <p class="small muted">Buyers don't log in &mdash; they fill the public booking form on each
+    slot and track their order with a secret code.</p>
+</div>
+{% endblock %}

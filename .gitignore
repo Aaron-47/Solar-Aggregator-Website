@@ -1,0 +1,32 @@
+# --- Solar Aggregator: runtime / local-only files -------------------
+# Session secret (auto-generated on first run) - never commit this.
+Solar Aggregator/Code/.secret_key
+
+# SQLite runtime database + backups (recreated and auto-seeded on first run).
+Solar Aggregator/Code/solar.db
+Solar Aggregator/Code/solar.db-*
+Solar Aggregator/Code/*.db
+Solar Aggregator/Code/*.bak
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Cloudflare tunnel binary (55 MB, downloaded by start_public.ps1)
+Solar Aggregator/Code/cloudflared.exe
+cloudflared
+
+# Virtual environments / local env
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Logs and editor noise
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

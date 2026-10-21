@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Track order - Solar Aggregator{% endblock %}
+{% block content %}
+<div class="auth-box">
+  <h1>Track your order</h1>
+  <p class="muted">No account needed. Paste the secret code from your booking
+    confirmation to see your order status, payment step and timeline.
+    The same code works for a waitlist entry.</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Order code</label>
+    <input type="text" name="code" placeholder="e.g. AbC123_xYz..." required autofocus>
+    <button class="btn btn-primary btn-block" type="submit">Open my order</button>
+  </form>
+  <p class="small muted">Haven't booked yet? <a href="{{ url_for('index') }}">See open slots</a> and
+    fill the booking form &mdash; the code is shown right after you submit.</p>
+</div>
+{% endblock %}

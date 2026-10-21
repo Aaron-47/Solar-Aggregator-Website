@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Waitlist - Solar Aggregator{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('index') }}">&larr; Open slots</a> &middot;
+  <a href="{{ url_for('track') }}">Track another entry</a></p>
+
+<div class="page-head">
+  <div>
+    <h1>Waitlist entry <span class="badge {{ 'ok' if entry['status'] == 'CONVERTED' else ('muted' if entry['status'] == 'CANCELLED' else 'warn') }}">
+      {{ entry['status'] }}</span></h1>
+    <p class="muted">{{ entry['company'] }} &middot; {{ offer['title'] }}
+      <span class="badge tier">{{ offer['supplier_tier'] }}</span></p>
+  </div>
+</div>
+
+<div class="callout info">This is your private waitlist page &mdash; anyone with this link can view it.
+  Save the code <span class="mono">{{ entry['token'] }}</span> (also on
+  <a href="{{ url_for('track') }}">Track order</a>).</div>
+
+<div class="detail">
+  <section class="card">
+    <h3>Your request</h3>
+    <dl class="facts wide">
+      <dt>Company</dt><dd><strong>{{ entry['company'] }}</strong></dd>
+      <dt>Contact</dt><dd>{{ entry['contact'] }}{% if entry['phone'] %} &middot; {{ entry['phone'] }}{% endif %}</dd>
+      <dt>Email</dt><dd class="mono">{{ entry['email'] }}</dd>
+      <dt>Quantity</dt><dd><strong>{{ '%g'|format(entry['mw']) }} MW</strong></dd>
+      {% if entry['notes'] %}<dt>Notes</dt><dd>{{ entry['notes'] }}</dd>{% endif %}
+      <dt>Joined on</dt><dd>{{ fmt_dt(entry['created_at']) }}</dd>
+      <dt>Position in queue</dt><dd>#{{ position }}</dd>
+    </dl>
+
+    {% if entry['status'] == 'CONVERTED' %}
+      <div class="callout ok"><strong>Capacity allocated.</strong> We created your booking
+        (order #{{ entry['converted_booking_id'] }}) - the aggregator sends the tracking link
+        to {{ entry['email'] }}.</div>
+    {% elif entry['status'] == 'CANCELLED' %}
+      <div class="callout bad">This waitlist entry was closed. You can book any slot with
+        capacity left, or join another waitlist.</div>
+    {% else %}
+      <h3>What happens next</h3>
+      <ul class="steps">
+        <li>We hold your place in the queue for <strong>{{ offer['title'] }}</strong>.</li>
+        <li>If a buyer cancels, the freed MW goes to the first waiting buyer &mdash; we call and email you.</li>
+        <li>Once capacity is confirmed we create your booking and send you a tracking link.</li>
+        <li>Nothing is charged until you complete the payment step, and you can cancel any time
+            before the slot date.</li>
+      </ul>
+    {% endif %}
+  </section>
+
+  <aside>
+    <div class="card sticky">
+      <h3>Slot status</h3>
+      <div class="bar big"><div data-offer="{{ offer['id'] }}" data-live="bar" style="width: {{ state['pct'] }}%"></div></div>
+      <p class="small muted">
+        <span data-offer="{{ offer['id'] }}" data-live="remaining">{{ '%g'|format(state['remaining_mw']) }}</span> MW still open of
+        {{ '%g'|format(state['capacity_mw']) }} MW
+        &middot; waitlist <span data-offer="{{ offer['id'] }}" data-live="waitlist">{{ state['waitlist'] }}</span>
+      </p>
+      <dl class="facts wide">
+        <dt>Price</dt><dd><span data-offer="{{ offer['id'] }}" data-live="price">{{ '%.2f'|format(state['price']) }}</span> &#8377;/W</dd>
+        <dt>Orders close</dt><dd>{{ fmt_dt(offer['cutoff_date'], false) }}</dd>
+        <dt>Delivery</dt><dd>{{ fmt_dt(offer['delivery_date'], false) }}</dd>
+      </dl>
+      <a class="btn btn-ghost btn-block" href="{{ url_for('offer_detail', offer_id=offer['id']) }}">See the slot</a>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='live.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Capacity dashboard - Solar Aggregator{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Capacity dashboard</h1>
+    <p class="muted">Every open slot, how much of it is taken and how much is still available.
+      <span class="live-dot" data-live-stamp>live</span></p>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('index') }}#slots">Book a slot</a>
+</div>
+
+<div class="kpis">
+  <div class="kpi card"><span>Open slots</span><strong data-capacity="slots">{{ capacity['slots'] }}</strong></div>
+  <div class="kpi card"><span>Published capacity</span><strong data-capacity="total">{{ '%g'|format(capacity['capacity_mw']) }} MW</strong></div>
+  <div class="kpi card"><span>Booked</span><strong data-capacity="booked">{{ '%g'|format(capacity['booked_mw']) }} MW</strong></div>
+  <div class="kpi card"><span>Still open</span><strong data-capacity="remaining">{{ '%g'|format(capacity['remaining_mw']) }} MW</strong></div>
+  <div class="kpi card"><span>Pool filled</span><strong data-capacity="pct">{{ '%.0f'|format(capacity['pct']) }}%</strong></div>
+  <div class="kpi card"><span>On waitlists</span><strong data-capacity="waitlist">{{ capacity['waitlist'] }}</strong></div>
+</div>
+
+{% if offers %}
+<div class="grid" style="margin-bottom:26px">
+  {% for o in offers %}
+  {% set s = states[o['id']] %}
+  <div class="card offer-card-static">
+    <div class="card-top">
+      {% if s['full'] %}<span class="badge bad">Fully booked</span>
+      {% else %}<span class="badge open">Booking open</span>{% endif %}
+      <span class="badge tier">{{ s['tier'] }}</span>
+    </div>
+    <h3>{{ o['title'] }}</h3>
+    <p class="muted small">{{ o['sku'] }}</p>
+    <div class="price"><span data-offer="{{ o['id'] }}" data-live="price">{{ '%.2f'|format(s['price']) }}</span> <span>&#8377;/W</span></div>
+    <div class="bar big"><div data-offer="{{ o['id'] }}" data-live="bar" style="width: {{ s['pct'] }}%"></div></div>
+    <p class="small muted">
+      <span data-offer="{{ o['id'] }}" data-live="remaining">{{ '%g'|format(s['remaining_mw']) }}</span> MW open of
+      {{ '%g'|format(s['capacity_mw']) }} MW
+      &middot; <span data-offer="{{ o['id'] }}" data-live="pct">{{ '%.0f'|format(s['pct']) }}</span>% booked
+      &middot; waitlist <span data-offer="{{ o['id'] }}" data-live="waitlist">{{ s['waitlist'] }}</span>
+    </p>
+    <a class="btn btn-primary btn-sm btn-block" href="{{ url_for('offer_detail', offer_id=o['id']) }}">
+      {{ 'Join the waitlist' if s['full'] else 'Book this slot' }} &rarr;</a>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="section-title">Slot by slot</h2>
+<table class="table">
+  <thead>
+    <tr><th>Slot</th><th>Supplier</th><th>Specification</th><th>Price</th><th>Capacity</th>
+        <th>Booked</th><th>Open</th><th>Pool target</th><th>Cut-off</th><th>Delivery</th><th>Waitlist</th></tr>
+  </thead>
+  <tbody>
+  {% for o in offers %}
+  {% set s = states[o['id']] %}
+    <tr>
+      <td><strong>{{ o['title'] }}</strong></td>
+      <td><span class="badge tier">{{ s['tier'] }}</span></td>
+      <td class="muted small">{{ o['sku'] }}</td>
+      <td><span data-offer="{{ o['id'] }}" data-live="price">{{ '%.2f'|format(s['price']) }}</span> &#8377;/W
+        {% if s['discount_pct'] %}<br><span class="small muted">-{{ '%g'|format(s['discount_pct']) }}% volume</span>{% endif %}</td>
+      <td>{{ '%g'|format(s['capacity_mw']) }} MW</td>
+      <td><span data-offer="{{ o['id'] }}" data-live="booked">{{ '%g'|format(s['booked_mw']) }}</span> MW</td>
+      <td><strong><span data-offer="{{ o['id'] }}" data-live="remaining">{{ '%g'|format(s['remaining_mw']) }}</span> MW</strong></td>
+      <td>{{ '%g'|format(s['min_pool_mw']) }} MW
+        {% if s['pool_met'] %}<span class="badge ok">met</span>{% else %}<span class="badge warn">building</span>{% endif %}</td>
+      <td>{{ fmt_dt(o['cutoff_date'], false) }}</td>
+      <td>{{ fmt_dt(o['delivery_date'], false) }}</td>
+      <td><span data-offer="{{ o['id'] }}" data-live="waitlist">{{ s['waitlist'] }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No slots are open right now.</p>
+{% endif %}
+
+{% if history %}
+<h2 class="section-title">Recently fulfilled</h2>
+<table class="table">
+  <thead><tr><th>Buyer</th><th>Slot</th><th>Quantity</th><th>Booked on</th></tr></thead>
+  <tbody>
+  {% for h in history %}
+    <tr>
+      <td><strong>{{ h['company'] }}</strong></td>
+      <td class="muted small">{{ h['title'] }}</td>
+      <td>{{ '%g'|format(h['total_mw']) }} MW</td>
+      <td class="muted small">{{ fmt_dt(h['created_at']) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='live.js') }}"></script>
+{% endblock %}

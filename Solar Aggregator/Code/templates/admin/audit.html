@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Audit trail - Backend{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Audit trail</h1>
+    <p class="muted">Every state change, payment instruction and admin action, newest first.
+      {{ rows|length }} entr{{ 'y' if rows|length == 1 else 'ies' }} shown.</p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('admin_audit_csv') }}">Download CSV</a>
+</div>
+
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search message, event or id">
+  <select name="entity">
+    <option value="">All objects</option>
+    {% for e in entities %}
+      <option value="{{ e }}" {{ 'selected' if f_entity == e else '' }}>{{ e }}</option>
+    {% endfor %}
+  </select>
+  <select name="actor">
+    <option value="">All actors</option>
+    {% for a in ['admin', 'buyer', 'system', 'psp', 'anonymous'] %}
+      <option value="{{ a }}" {{ 'selected' if f_actor == a else '' }}>{{ a }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-ghost" type="submit">Filter</button>
+  {% if f_entity or f_actor or q %}
+    <a class="btn btn-ghost" href="{{ url_for('admin_audit') }}">Clear</a>
+  {% endif %}
+</form>
+
+<table class="table">
+  <thead><tr><th>When</th><th>Object</th><th>Event</th><th>Message</th><th>Actor</th><th>IP</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td class="muted small">{{ fmt_dt(r['created_at']) }}</td>
+      <td><span class="badge muted">{{ r['entity_type'] }}</span>
+        {% if r['entity_id'] %}<span class="small">#{{ r['entity_id'] }}</span>{% endif %}</td>
+      <td><strong>{{ r['event'] }}</strong></td>
+      <td class="small">{{ r['message'] }}</td>
+      <td class="small">{{ r['actor'] }}</td>
+      <td class="muted small mono">{{ r['ip'] or '-' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">No audit entries match this filter.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

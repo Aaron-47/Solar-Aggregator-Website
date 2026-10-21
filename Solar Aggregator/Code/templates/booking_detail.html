@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Order #{{ b['id'] }} - Solar Aggregator{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('index') }}">&larr; Open slots</a> &middot;
+  <a href="{{ url_for('track') }}">Track another order</a></p>
+
+<div class="page-head">
+  <div>
+    <h1>Order #{{ b['id'] }} <span class="badge {{ status_tone(b['status']) }}">{{ status_label(b['status']) }}</span></h1>
+    <p class="muted">{{ b['company'] }} &middot; {{ offer['title'] }}
+      <span class="badge tier">{{ offer['supplier_tier'] }}</span>
+      &middot; booked {{ fmt_dt(b['created_at']) }}</p>
+  </div>
+  <div class="actions">
+    {% if can_cancel %}
+      <form method="post" action="{{ url_for('cancel_booking', token=b['token']) }}"
+            onsubmit="return confirm('{{ 'Cancel this booking? A restocking fee of ' + fmt_inr(penalty['fee']) + ' applies.' if penalty['applies'] else 'Cancel this booking? Any block will be released and capacity freed.' }}');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-danger" type="submit">Cancel booking</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="callout info">This is your private order page &mdash; anyone with this link can view it.
+  Bookmark it or save the code <span class="mono">{{ b['token'] }}</span> (also on
+  <a href="{{ url_for('track') }}">Track order</a>).</div>
+
+<div class="detail">
+  <section>
+    <div class="card">
+      <h3>Your requirement</h3>
+      <table class="table">
+        <thead><tr><th>Project / company</th><th>Quantity</th><th>Notes</th></tr></thead>
+        <tbody>
+        {% for it in items %}
+          <tr><td><strong>{{ it['project_name'] }}</strong></td><td>{{ '%g'|format(it['mw']) }} MW</td><td class="muted">{{ it['notes'] or '-' }}</td></tr>
+        {% endfor %}
+          <tr class="sum"><td>Total</td><td><strong>{{ '%g'|format(b['total_mw']) }} MW</strong></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    {% if b['payment_mode'] == 'upi_block' and b['status'] in ('PENDING_BLOCK','BLOCK_FAILED','BLOCK_EXPIRED') %}
+    <div class="card">
+      <h3>UPI block consent</h3>
+      <div class="consent">
+        <dl class="facts wide">
+          <dt>Amount blocked</dt><dd><strong>{{ fmt_inr(mandate['blocked_amount']) if mandate else fmt_inr(estimate) }}</strong> (estimate at {{ '%.2f'|format(price) }} &#8377;/W)</dd>
+          <dt>What is blocked</dt><dd>An earmark on your bank account. <strong>No money leaves your account today.</strong></dd>
+          <dt>Debit date</dt><dd>{{ fmt_dt(offer['delivery_date'], false) }} (the slot date), after your price is locked</dd>
+          <dt>Maximum debit</dt><dd>The blocked amount above &mdash; a debit can never exceed it</dd>
+          <dt>How to cancel</dt><dd>Cancel from this page any time before the slot date
+            ({{ fmt_dt(offer['delivery_date'], false) }}), or revoke the mandate in your UPI app.
+            Cancelling more than {{ offer['penalty_days'] }} day{{ 's' if offer['penalty_days'] != 1 }} before delivery is free;
+            inside that window a {{ '%g'|format(offer['restocking_fee_pct']) }}% restocking fee applies.</dd>
+          <dt>Valid until</dt><dd>{{ fmt_dt(mandate['valid_to'], false) if mandate else fmt_dt(offer['delivery_date'], false) }}</dd>
+        </dl>
+        <p class="small muted">Sandbox mode ({{ 'on' if psp.SANDBOX else 'off' }}): no real PSP call is made.
+          In production this step opens your UPI app via an intent/collect request from our PSP.</p>
+      </div>
+
+      {% if mandate and mandate['status'] == 'PENDING_APPROVAL' %}
+        <form method="post" action="{{ url_for('pay_booking', token=b['token']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="approve">
+          <label>Approve with UPI PIN (sandbox)</label>
+          <p class="small muted">Mandate <span class="mono">{{ mandate['psp_ref'] }}</span> to
+            <span class="mono">{{ mandate['customer_vpa'] or 'your VPA' }}</span></p>
+          <button class="btn btn-primary btn-block" type="submit">Approve block &mdash; enter UPI PIN</button>
+          <label class="check small">
+            <input type="checkbox" name="simulate_fail" value="1">
+            Simulate insufficient balance (demo the failure path)
+          </label>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('pay_booking', token=b['token']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="request">
+          <label>Your UPI ID (VPA)</label>
+          <input type="text" name="vpa" placeholder="yourname@bank" pattern=".*@.*" required>
+          <button class="btn btn-primary btn-block" type="submit">Send block request</button>
+          <p class="small muted">You will get a collect/intent request in your UPI app; approve it to
+            confirm your booking. You have 24 hours before the hold request expires.</p>
+        </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if b['payment_mode'] == 'bank' and b['status'] in ('PENDING_BLOCK','BLOCK_FAILED') %}
+    <div class="card">
+      <h3>Bank transfer / LC</h3>
+      <div class="consent">
+        <dl class="facts wide">
+          <dt>Est. order value</dt><dd><strong>{{ fmt_inr(estimate) }}</strong> at {{ '%.2f'|format(price) }} &#8377;/W (final price locked by the aggregator)</dd>
+          <dt>Transfer to</dt><dd class="mono">Beneficiary: Solar Aggregator &middot; A/C 0000 0000 0000 &middot; IFSC XXXX000123<br><span class="muted">Replace with your actual company account details</span></dd>
+          <dt>Reference</dt><dd>Enter the RTGS/NEFT UTR number, or your LC number / bank guarantee reference</dd>
+          <dt>After submitting</dt><dd>We verify the transfer and confirm your booking</dd>
+        </dl>
+        <p class="small muted">For MW-scale orders UPI block limits are too low - RTGS/NEFT, LC or
+          escrow is the standard instrument (see the project's payment design note).</p>
+      </div>
+      <form method="post" action="{{ url_for('pay_booking', token=b['token']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="submit_ref">
+        <label>UTR / LC / BG reference</label>
+        <input type="text" name="payment_ref" required>
+        <button class="btn btn-primary btn-block" type="submit">Submit reference</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <h3>Order tracking</h3>
+      <ul class="timeline">
+        {% for e in events %}
+        <li>
+          <span class="dot {{ status_tone(b['status']) if loop.first else 'muted' }}"></span>
+          <div>
+            <strong>{{ e['event']|replace('_',' ')|title }}</strong>
+            <p>{{ e['message'] }}</p>
+            <span class="muted small">{{ fmt_dt(e['created_at']) }} &middot; {{ e['actor'] }}</span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card sticky">
+      <h3>Price &amp; payment</h3>
+      <dl class="facts wide">
+        {% if b['price_locked'] %}
+          <dt>Locked price</dt><dd><strong>{{ '%.2f'|format(b['unit_price_watt']) }} &#8377;/W</strong></dd>
+          <dt>Order value</dt><dd><strong>{{ fmt_inr(b['amount']) }}</strong></dd>
+        {% else %}
+          <dt>Price</dt><dd class="muted">Not locked yet - the aggregator confirms it after your block.</dd>
+          <dt>Published price</dt><dd><span data-price>{{ '%.2f'|format(price) }}</span> &#8377;/W
+            {% if discount %}<span class="muted">(volume price, -{{ '%g'|format(discount) }}%)</span>{% endif %}</dd>
+        {% endif %}
+        {% if b['rebate_applied'] %}
+          <dt>Rebate credit used</dt><dd><strong>{{ fmt_inr(b['rebate_applied']) }}</strong> (from an earlier slot)</dd>
+        {% endif %}
+        {% if b['restocking_fee'] %}
+          <dt>Restocking fee</dt><dd><strong>{{ fmt_inr(b['restocking_fee']) }}</strong> (late cancellation)</dd>
+        {% endif %}
+        <dt>Orders close</dt><dd>{{ fmt_dt(offer['cutoff_date'], false) }}</dd>
+        <dt>Slot date (debit)</dt><dd>{{ fmt_dt(offer['delivery_date'], false) }}</dd>
+      </dl>
+
+      {% if my_rebates %}
+        <div class="callout ok"><strong>Rebate available: {{ fmt_inr(my_rebates|sum(attribute='amount')) }}</strong><br>
+          Apply it automatically against your next booking - use the same email address
+          ({{ b['email'] }}).</div>
+      {% endif %}
+
+      {% if can_cancel %}
+        <div class="callout {{ 'warn' if penalty['applies'] else 'info' }}">
+          {% if penalty['applies'] %}
+            <strong>Cancelling now costs a restocking fee of {{ fmt_inr(penalty['fee']) }}</strong>
+            ({{ '%g'|format(penalty['pct']) }}%) &mdash; {{ penalty['reason'] }}.
+          {% else %}
+            Cancelling is free &mdash; {{ penalty['reason'] }}.
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if mandate %}
+        <hr class="sep">
+        <h4>UPI block</h4>
+        <dl class="facts wide">
+          <dt>Reference</dt><dd class="mono">{{ mandate['psp_ref'] }}</dd>
+          <dt>Status</dt><dd><span class="badge {{ 'ok' if mandate['status'] == 'ACTIVE' else ('warn' if mandate['status'] == 'PENDING_APPROVAL' else 'muted') }}">{{ mandate['status'].replace('_',' ') }}</span></dd>
+          <dt>Blocked</dt><dd>{{ fmt_inr(mandate['blocked_amount']) }}</dd>
+          <dt>Valid until</dt><dd>{{ fmt_dt(mandate['valid_to'], false) }}</dd>
+          {% if mandate['customer_vpa'] %}<dt>Your VPA</dt><dd class="mono">{{ mandate['customer_vpa'] }}</dd>{% endif %}
+        </dl>
+        <p class="small muted">Your money stays in your account. The hold is debited only on the
+          slot date, up to the blocked amount. You can cancel before the cut-off to release it.</p>
+      {% elif b['payment_mode'] == 'bank' %}
+        <hr class="sep">
+        <h4>Bank transfer</h4>
+        {% if b['payment_ref'] %}
+          <dl class="facts wide"><dt>Reference</dt><dd class="mono">{{ b['payment_ref'] }}</dd></dl>
+        {% else %}
+          <p class="small muted">No reference submitted yet.</p>
+        {% endif %}
+      {% endif %}
+
+      {% if debits %}
+        <hr class="sep">
+        <h4>Debits</h4>
+        <ul class="plain small">
+          {% for d in debits %}
+            <li>{{ fmt_dt(d['attempted_at']) }} - {{ fmt_inr(d['amount']) }} - {{ d['status'] }} <span class="mono muted">{{ d['psp_txn_ref'] }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if b['status'] == 'PAYMENT_DUE' %}
+        <div class="callout warn">Payment of {{ fmt_inr(b['amount']) }} is due on the slot date
+          ({{ fmt_dt(offer['delivery_date'], false) }}). Keep the block active.</div>
+      {% elif b['status'] == 'AWAITING_BANK_VERIFY' %}
+        <div class="callout info">Reference <span class="mono">{{ b['payment_ref'] }}</span> received - we will verify the transfer and confirm your order.</div>
+      {% elif b['status'] == 'CONFIRMED_BLOCKED' %}
+        <div class="callout ok">Funds earmarked. Await price lock from the aggregator.</div>
+      {% elif b['status'] in ('BLOCK_FAILED','BLOCK_EXPIRED','PAYMENT_FAILED') %}
+        <div class="callout bad">Needs your attention - complete the payment step above.</div>
+      {% elif b['status'] in ('PAID','FULFILLED') %}
+        <div class="callout ok">Payment received{% if b['status'] == 'FULFILLED' %} and order fulfilled{% endif %}. Thank you.</div>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+{% endblock %}

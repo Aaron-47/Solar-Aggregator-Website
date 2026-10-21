@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Open slots - Solar Aggregator{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="hero-kicker">Fresh inventory &middot; updated monthly</p>
+    <h1>New solar MW slots incoming this month &mdash; book your slot now!</h1>
+    <p>Lock bulk-buy prices on Tier-1 and Tier-2 solar modules for the upcoming delivery month.
+       Any quantity from {{ '%g'|format(min_booking_mw) }} MW upwards is pooled &mdash; first-come first-served, and once a slot
+       fills you can queue for the next one.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#slots">Book slot now</a>
+      <a class="btn btn-ghost" href="{{ url_for('capacity_dashboard') }}">Capacity dashboard</a>
+      <a class="btn btn-ghost" href="#new-booking">How to book &mdash; 2 min, no login</a>
+    </div>
+  </div>
+  <div class="hero-card">
+    <div class="kpi"><span>Why book with us</span></div>
+    <ul class="hero-perks">
+      <li><strong>Save on bulk buys</strong> &mdash; pooled MW-scale orders at distributor prices</li>
+      <li><strong>Price locked for you</strong> &mdash; what we quote is what you pay</li>
+      <li><strong>Zero risk upfront</strong> &mdash; approve a UPI block; nothing leaves your account until the slot date</li>
+      <li><strong>Classified supply</strong> &mdash; Tier 1 / Tier 2 suppliers, GST invoice, delivery on the slot date</li>
+      <li><strong>Rebates later</strong> &mdash; no upfront discount games; any rebate is credited after the slot</li>
+    </ul>
+  </div>
+</section>
+
+<section class="card" id="capacity-strip">
+  <div class="page-head" style="margin-bottom:6px">
+    <div>
+      <h2 style="margin:0">Capacity dashboard</h2>
+      <p class="muted" style="margin:4px 0 0">Live inventory across every open slot.
+        <span class="live-dot" data-live-stamp>live</span></p>
+    </div>
+    <a class="btn btn-ghost" href="{{ url_for('capacity_dashboard') }}">Full dashboard &rarr;</a>
+  </div>
+  <div class="kpis">
+    <div class="kpi card"><span>Open slots</span><strong data-capacity="slots">{{ capacity['slots'] }}</strong></div>
+    <div class="kpi card"><span>Published capacity</span><strong data-capacity="total">{{ '%g'|format(capacity['capacity_mw']) }} MW</strong></div>
+    <div class="kpi card"><span>Booked</span><strong data-capacity="booked">{{ '%g'|format(capacity['booked_mw']) }} MW</strong></div>
+    <div class="kpi card"><span>Still open</span><strong data-capacity="remaining">{{ '%g'|format(capacity['remaining_mw']) }} MW</strong></div>
+    <div class="kpi card"><span>Pool filled</span><strong data-capacity="pct">{{ '%.0f'|format(capacity['pct']) }}%</strong></div>
+    <div class="kpi card"><span>On waitlists</span><strong data-capacity="waitlist">{{ capacity['waitlist'] }}</strong></div>
+  </div>
+</section>
+
+<section class="card" id="new-booking">
+  <div class="page-head" style="margin-bottom:6px">
+    <div>
+      <h2 style="margin:0">Book your slot in 2 minutes &mdash; no login needed</h2>
+      <p class="muted" style="margin:4px 0 0">Pick a slot, fill one short form (your company details + the wattage you need),
+        and get an instant secret tracking code. Price locked; pay only on the slot date.</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('track') }}">I have a tracking code</a>
+  </div>
+  {% if offers %}
+  <ul class="plain">
+    {% for o in offers %}
+    {% set s = states[o['id']] %}
+    <li style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <strong>{{ o['title'] }}</strong>
+        <span class="badge tier">{{ s['tier'] }}</span>
+        <span class="muted small">&nbsp;&middot; <span data-offer="{{ o['id'] }}" data-live="price">{{ '%.2f'|format(s['price']) }}</span> &#8377;/W
+          &middot; <span data-offer="{{ o['id'] }}" data-live="remaining">{{ '%g'|format(s['remaining_mw']) }}</span> MW still open
+          {% set dl = days_left(o['cutoff_date']) %}
+          {% if dl is not none and dl >= 0 %}&middot; cut-off in {{ dl }} day{{ 's' if dl != 1 }}{% endif %}
+        </span>
+      </div>
+      {% if s['full'] %}
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('offer_detail', offer_id=o['id']) }}#waitlist">Join the waitlist &rarr;</a>
+      {% else %}
+        <a class="btn btn-primary btn-sm" href="{{ url_for('offer_detail', offer_id=o['id']) }}#book-form">Book this slot &rarr;</a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty" style="padding:12px">No slots are open right now &mdash; new slots are published every month.</p>
+  {% endif %}
+</section>
+
+<h2 id="slots" class="section-title">Open slots &mdash; book now, limited MW</h2>
+{% if offers %}
+<div class="grid">
+  {% for o in offers %}
+  {% set s = states[o['id']] %}
+  <a class="card offer-card" href="{{ url_for('offer_detail', offer_id=o['id']) }}">
+    <div class="card-top">
+      {% if s['full'] %}
+        <span class="badge bad">Fully booked</span>
+      {% else %}
+        <span class="badge open">Booking open</span>
+      {% endif %}
+      {% set dl = days_left(o['cutoff_date']) %}
+      {% if dl is not none %}
+        {% if dl > 0 %}<span class="badge {{ 'warn' if dl < 7 else 'info' }}">{{ dl }} day{{ 's' if dl != 1 }} left</span>
+        {% elif dl == 0 %}<span class="badge warn">Cut-off today</span>{% endif %}
+      {% endif %}
+    </div>
+    <h3>{{ o['title'] }}</h3>
+    <p class="muted">{{ o['sku'] }}</p>
+    <div class="price"><span data-offer="{{ o['id'] }}" data-live="price">{{ '%.2f'|format(s['price']) }}</span> <span>&#8377;/W &middot; locked for you</span></div>
+    {% if s['discount_pct'] %}
+      <p class="small muted price-note">Volume price &mdash; {{ '%.2f'|format(s['base_price']) }} &#8377;/W less {{ '%g'|format(s['discount_pct']) }}% for a {{ '%.0f'|format(s['pct']) }}% filled pool</p>
+    {% endif %}
+    <div class="bar"><div data-offer="{{ o['id'] }}" data-live="bar" style="width: {{ s['pct'] }}%"></div></div>
+    <p class="small muted"><span data-offer="{{ o['id'] }}" data-live="remaining">{{ '%g'|format(s['remaining_mw']) }}</span> MW still open
+      &middot; <span data-offer="{{ o['id'] }}" data-live="pct">{{ '%.0f'|format(s['pct']) }}</span>% booked</p>
+    <dl class="facts">
+      <dt>Supplier</dt><dd><span class="badge tier">{{ s['tier'] }}</span></dd>
+      <dt>Cut-off</dt><dd>{{ fmt_dt(o['cutoff_date'], false) }}</dd>
+      <dt>Delivery</dt><dd>{{ fmt_dt(o['delivery_date'], false) }}</dd>
+      <dt>From</dt><dd>{{ '%g'|format(min_booking_mw) }} MW</dd>
+    </dl>
+    {% if s['full'] %}
+      <span class="btn btn-ghost btn-block offer-cta">Fully booked &mdash; join the waitlist &rarr;</span>
+    {% else %}
+      <span class="btn btn-primary btn-block offer-cta">Book slot now &rarr;</span>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty">No slots are open right now. Check back soon &mdash; deliveries fall on the 15th and last day of each month.</p>
+{% endif %}
+
+{% if past %}
+<h2 class="section-title">Past slots</h2>
+<table class="table">
+  <thead><tr><th>Slot</th><th>Specification</th><th>Supplier</th><th>Delivery</th><th>Capacity</th><th>Price</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for o in past %}
+    <tr>
+      <td>{{ o['title'] }}</td>
+      <td class="muted">{{ o['sku'] }}</td>
+      <td><span class="badge tier">{{ o['supplier_tier'] }}</span></td>
+      <td>{{ fmt_dt(o['delivery_date'], false) }}</td>
+      <td>{{ '%g'|format(o['capacity_mw']) }} MW</td>
+      <td>{{ '%.2f'|format(o['price_per_watt']) }} &#8377;/W</td>
+      <td><span class="badge muted">{{ o['status'] }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='live.js') }}"></script>
+{% endblock %}

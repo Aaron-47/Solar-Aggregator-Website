@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ 'New offer' if creating else 'Edit offer' }} - Backend{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('admin_offers') }}">&larr; Offers</a></p>
+<div class="auth-box wide-box">
+  <h1>{{ 'New slot offer' if creating else 'Edit slot offer' }}</h1>
+  {% if not creating %}
+    <p class="muted">Changes here never touch bookings that already have a locked price.</p>
+  {% endif %}
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label>Title</label>
+    <input type="text" name="title" required value="{{ offer['title'] if offer else '' }}" placeholder="e.g. November 2026 Slot - 5 MW Module Pool">
+
+    <label>Specification (published instead of a brand name)</label>
+    <input type="text" name="sku" required value="{{ offer['sku'] if offer else '' }}" placeholder="e.g. Tier 1 - 550 W Mono-PERC Bifacial">
+
+    <label>Supplier class</label>
+    <select name="supplier_tier">
+      {% for t in ['Tier 1', 'Tier 2'] %}
+        <option value="{{ t }}" {{ 'selected' if (offer and offer['supplier_tier'] == t) or (not offer and t == 'Tier 1') else '' }}>{{ t }}</option>
+      {% endfor %}
+    </select>
+    <p class="small muted">Buyers see the class, never the brand: {{ tier_label('Tier 1') }}.</p>
+
+    <div class="row2">
+      <div>
+        <label>Capacity (MW)</label>
+        <input type="number" name="capacity_mw" step="0.1" min="0.1" required value="{{ offer['capacity_mw'] if offer else '' }}">
+      </div>
+      <div>
+        <label>Pool target (MW) &mdash; soft goal</label>
+        <input type="number" name="min_pool_mw" step="0.05" min="0" value="{{ offer['min_pool_mw'] if offer else '0.1' }}">
+        <p class="small muted">Not a gate: smaller orders are accepted and pooled.</p>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label>Published price (&#8377; per watt)</label>
+        <input type="number" name="price_per_watt" step="0.01" min="0.01" required value="{{ offer['price_per_watt'] if offer else '' }}">
+        <p class="small muted">The volume ladder in <a href="{{ url_for('admin_settings') }}">Settings</a>
+          can shade this down as the pool fills.</p>
+      </div>
+      <div>
+        <label>Status</label>
+        <select name="status">
+          {% for s in ('draft','open','closed','fulfilled','cancelled') %}
+            <option value="{{ s }}" {{ 'selected' if (offer and offer['status'] == s) or (not offer and s == 'draft') else '' }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label>Rebate % (granted later)</label>
+        <input type="number" name="rebate_pct" step="0.1" min="0" value="{{ offer['rebate_pct'] if offer else '0' }}">
+        <p class="small muted">0 = no rebate yet. Rebates are granted after the slot, never at booking.</p>
+      </div>
+      <div>
+        <label>Rebate terms</label>
+        <input type="text" name="rebate_terms" value="{{ offer['rebate_terms'] if offer else '' }}"
+               placeholder="e.g. credited after delivery against the next booking">
+      </div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label>Restocking fee % (late cancellation)</label>
+        <input type="number" name="restocking_fee_pct" step="0.1" min="0"
+               value="{{ offer['restocking_fee_pct'] if offer else '2' }}">
+      </div>
+      <div>
+        <label>Fee window (days before delivery)</label>
+        <input type="number" name="penalty_days" step="1" min="0"
+               value="{{ offer['penalty_days'] if offer else '7' }}">
+        <p class="small muted">Cancelling inside this window costs the restocking fee.</p>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label>Orders close (cut-off)</label>
+        <input type="date" name="cutoff_date" required value="{{ offer['cutoff_date'] if offer else '' }}">
+      </div>
+      <div>
+        <label>Delivery (slot date)</label>
+        <input type="date" name="delivery_date" required value="{{ offer['delivery_date'] if offer else '' }}">
+      </div>
+    </div>
+
+    <label>Description</label>
+    <textarea name="description" rows="3" placeholder="What is pooled, which modules, why this slot">{{ offer['description'] if offer else '' }}</textarea>
+
+    <label>Terms</label>
+    <textarea name="terms" rows="3" placeholder="Invoicing, commission, refunds, GST, cancellation policy">{{ offer['terms'] if offer else '' }}</textarea>
+
+    <button class="btn btn-primary" type="submit">{{ 'Create offer' if creating else 'Save changes' }}</button>
+    <a class="btn btn-ghost" href="{{ url_for('admin_offers') }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}{{ offer['title'] }} - Solar Aggregator{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('index') }}">&larr; All slots</a> &middot;
+  <a href="{{ url_for('capacity_dashboard') }}">Capacity dashboard</a></p>
+
+<div class="detail">
+  <section class="card">
+    <div class="card-top">
+      <span class="badge {{ 'open' if offer['status'] == 'open' else 'muted' }}">{{ offer['status'] }}</span>
+      {% if dl is not none and offer['status'] == 'open' %}
+        <span class="badge {{ 'warn' if dl < 7 else 'info' }}">
+          {% if dl > 0 %}{{ dl }} day{{ 's' if dl != 1 }} to cut-off
+          {% elif dl == 0 %}Cut-off is today{% else %}Cut-off passed{% endif %}
+        </span>
+      {% endif %}
+    </div>
+    <h1>{{ offer['title'] }} <span class="badge tier">{{ state['tier'] }}</span></h1>
+    <p class="muted">{{ offer['sku'] }}</p>
+
+    <div class="price big"><span data-offer="{{ offer['id'] }}" data-live="price">{{ '%.2f'|format(state['price']) }}</span>
+      <span>&#8377;/W &middot; published price</span></div>
+    {% if state['discount_pct'] %}
+      <p class="small muted price-note">Volume price: {{ '%.2f'|format(state['base_price']) }} &#8377;/W less
+        {{ '%g'|format(state['discount_pct']) }}% while the pool is {{ '%.0f'|format(state['pct']) }}% filled.</p>
+    {% endif %}
+    {% if state['rebate_pct'] %}
+      <p class="small muted">Up to {{ '%g'|format(state['rebate_pct']) }}% rebate is credited <em>after</em> the slot date -
+        {{ offer['rebate_terms'] or 'not at booking time.' }}</p>
+    {% endif %}
+
+    <div class="bar big"><div data-offer="{{ offer['id'] }}" data-live="bar" style="width: {{ pct }}%"></div></div>
+    <p class="small muted">
+      <span data-offer="{{ offer['id'] }}" data-live="remaining">{{ '%g'|format(state['remaining_mw']) }}</span> MW still open of
+      {{ '%g'|format(cap) }} MW &middot;
+      <span data-offer="{{ offer['id'] }}" data-live="pct">{{ '%.0f'|format(pct) }}</span>% filled
+      &middot; <span class="live-dot" data-live-stamp>live</span>
+    </p>
+
+    {% if offer['description'] %}<p>{{ offer['description'] }}</p>{% endif %}
+    {% if offer['terms'] %}
+      <h3>Terms</h3>
+      <p class="muted">{{ offer['terms'] }}</p>
+    {% endif %}
+
+    <dl class="facts wide">
+      <dt>Supplier class</dt><dd><span class="badge tier">{{ state['tier'] }}</span> {{ tier_label(state['tier']) }}</dd>
+      <dt>Capacity</dt><dd>{{ '%g'|format(cap) }} MW</dd>
+      <dt>Pool target</dt><dd>{{ '%g'|format(offer['min_pool_mw']) }} MW
+        {% if state['pool_met'] %}<span class="badge ok">met</span>{% else %}<span class="badge warn">building</span>{% endif %}
+        <br><span class="muted small">A soft target, not a gate &mdash; smaller orders are pooled with the others.</span></dd>
+      <dt>Minimum order</dt><dd>{{ '%g'|format(min_booking_mw) }} MW ({{ (min_booking_mw * 1000)|round|int }} kW)</dd>
+      <dt>Orders close</dt><dd>{{ fmt_dt(offer['cutoff_date'], false) }}</dd>
+      <dt>Delivery (slot date)</dt><dd>{{ fmt_dt(offer['delivery_date'], false) }}</dd>
+      <dt>Est. value of 1 MW</dt><dd>{{ fmt_inr(1000000 * state['price']) }}</dd>
+      <dt>Late cancellation</dt><dd>{{ '%g'|format(offer['restocking_fee_pct']) }}% restocking fee if you cancel within
+        {{ offer['penalty_days'] }} day{{ 's' if offer['penalty_days'] != 1 }} of the slot date
+        {% if offer['restocking_fee_pct'] %}<br><span class="muted small">Earlier cancellations are free.</span>{% endif %}</dd>
+    </dl>
+  </section>
+
+  <aside>
+    <section class="card sticky">
+      <h3>Book this slot</h3>
+      {% if can_book %}
+        <p class="small muted">Fill the form below - no account needed. You will get a
+          secret tracking link for your order.</p>
+        <form method="post" action="{{ url_for('create_booking', offer_id=offer['id']) }}" id="book-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <label>Your company</label>
+          <input type="text" name="company" placeholder="e.g. Sunrise EPC Pvt Ltd" required>
+
+          <div class="row2">
+            <div>
+              <label>Contact person</label>
+              <input type="text" name="contact" placeholder="Full name" required>
+            </div>
+            <div>
+              <label>Phone</label>
+              <input type="text" name="phone" placeholder="+91 ...">
+            </div>
+          </div>
+
+          <label>Email</label>
+          <input type="email" name="email" id="email" placeholder="you@company.com" required>
+          <p class="small muted" id="rebate-hint"></p>
+          <label class="check small" id="rebate-row" hidden>
+            <input type="checkbox" name="apply_rebate" value="1" id="apply-rebate">
+            Apply my rebate credit (<span id="rebate-amount">₹0</span>) to this order
+          </label>
+
+          <label class="block-label">Required wattage (add one line per project / company)</label>
+          <div class="items" id="items">
+            <div class="item-row">
+              <input type="text" name="project_name" placeholder='Project / company, e.g. "Company-A"' required>
+              <input type="number" name="mw" step="0.05" min="{{ min_booking_mw }}" value="0.1" placeholder="MW" required class="mw">
+              <input type="text" name="notes" placeholder="Notes (optional)">
+            </div>
+          </div>
+          <button type="button" class="btn btn-ghost" id="add-row">+ Add another line</button>
+
+          <div class="total-line">
+            <span>Total</span>
+            <strong><span id="total-mw">0</span> MW</strong>
+          </div>
+          <div class="total-line muted small">
+            <span>Est. order value</span>
+            <span id="total-inr">{{ fmt_inr(0) }}</span>
+          </div>
+          <p class="small muted">Minimum {{ '%g'|format(min_booking_mw) }} MW per line. Smaller orders are fine -
+            they are pooled with the rest of the slot.</p>
+
+          <label class="block-label">Payment path</label>
+          <div class="radio-card">
+            {% if current_accounts_ok %}
+            <label>
+              <input type="radio" name="payment_mode" value="upi_block" checked>
+              <strong>UPI block (ASBA / OTM style)</strong>
+              <span class="small muted">Nothing leaves your account now. A hold is placed for the
+              estimate; funds are debited only on the slot date. Company current accounts with
+              e-mandate/OTM support can be used.</span>
+            </label>
+            {% endif %}
+            <label>
+              <input type="radio" name="payment_mode" value="bank" {{ 'checked' if not current_accounts_ok else '' }}>
+              <strong>RTGS / NEFT / LC</strong>
+              <span class="small muted">For large orders above UPI limits &mdash; transfer against our
+              bank details or issue an LC, then submit the reference for verification.</span>
+            </label>
+          </div>
+          <p class="small muted" id="mode-hint"></p>
+
+          <button class="btn btn-primary btn-block" type="submit">Submit booking</button>
+          <p class="small muted">Submitting holds your capacity until you complete the payment step
+            (24 h). No commitment until you approve the block or submit a transfer reference.
+            Rebates, if any, are credited after the slot date - never at booking.</p>
+        </form>
+      {% elif state['full'] %}
+        <div class="callout warn"><strong>This slot is fully booked.</strong>
+          {{ '%g'|format(state['capacity_mw']) }} MW are taken. Join the waitlist and we will call you
+          the moment capacity frees up - cancellations roll to the next buyer in the queue.</div>
+        <h3>Join the waitlist</h3>
+        <form method="post" action="{{ url_for('join_waitlist', offer_id=offer['id']) }}" id="waitlist">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label>Your company</label>
+          <input type="text" name="company" placeholder="e.g. Sunrise EPC Pvt Ltd" required>
+          <div class="row2">
+            <div>
+              <label>Contact person</label>
+              <input type="text" name="contact" placeholder="Full name" required>
+            </div>
+            <div>
+              <label>Phone</label>
+              <input type="text" name="phone" placeholder="+91 ...">
+            </div>
+          </div>
+          <label>Email</label>
+          <input type="email" name="email" placeholder="you@company.com" required>
+          <label>Quantity you need (MW)</label>
+          <input type="number" name="mw" step="0.05" min="{{ min_booking_mw }}" value="1" required>
+          <label>Notes (optional)</label>
+          <input type="text" name="notes" placeholder="Project, delivery window, ..">
+          <button class="btn btn-primary btn-block" type="submit">Join the waitlist</button>
+          <p class="small muted">You get a secret tracking link for your waitlist entry.</p>
+        </form>
+      {% else %}
+        <p class="muted">This slot is not accepting orders
+          {% if dl is not none and dl < 0 %}(cut-off passed){% elif offer['status'] != 'open' %}({{ offer['status'] }}){% endif %}.</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+
+{% if can_book %}
+<script>
+(function () {
+  const wrap = document.getElementById('items');
+  const price = {{ state['price'] }};
+  document.getElementById('add-row').addEventListener('click', function () {
+    const row = wrap.firstElementChild.cloneNode(true);
+    row.querySelectorAll('input').forEach(i => i.value = '');
+    wrap.appendChild(row);
+    row.querySelector('input').focus();
+  });
+  function recalc() {
+    let mw = 0;
+    wrap.querySelectorAll('input[name="mw"]').forEach(i => { mw += parseFloat(i.value) || 0; });
+    document.getElementById('total-mw').textContent = (Math.round(mw * 100) / 100).toLocaleString();
+    document.getElementById('total-inr').textContent =
+      '₹' + Math.round(mw * 1000000 * price).toLocaleString('en-IN');
+    const hint = document.getElementById('mode-hint');
+    if (mw * 1000000 * price > {{ UPI_DEMO_LIMIT }}) {
+      hint.textContent = 'This order exceeds typical UPI block limits - we recommend RTGS/NEFT or LC.';
+      hint.style.color = '#b45309';
+    } else {
+      hint.textContent = '';
+    }
+  }
+  wrap.addEventListener('input', recalc);
+  recalc();
+
+  // Rebate credit earned on an earlier slot - applied against this order.
+  const email = document.getElementById('email');
+  const hint = document.getElementById('rebate-hint');
+  const row = document.getElementById('rebate-row');
+  const amount = document.getElementById('rebate-amount');
+  let checked = false;
+  function checkRebate() {
+    if (checked) { return; }
+    const value = (email.value || '').trim();
+    if (!value || value.indexOf('@') < 0) { return; }
+    fetch('/api/rebate?email=' + encodeURIComponent(value))
+      .then(r => r.json())
+      .then(data => {
+        if (data.available > 0) {
+          amount.textContent = '₹' + Math.round(data.available).toLocaleString('en-IN');
+          row.hidden = false;
+          hint.textContent = 'You have a rebate credit of ₹' +
+            Math.round(data.available).toLocaleString('en-IN') + ' from an earlier slot.';
+        } else {
+          row.hidden = true;
+          hint.textContent = '';
+        }
+      })
+      .catch(() => {});
+  }
+  email.addEventListener('blur', checkRebate);
+  email.addEventListener('change', checkRebate);
+})();
+</script>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='live.js') }}"></script>
+{% endblock %}

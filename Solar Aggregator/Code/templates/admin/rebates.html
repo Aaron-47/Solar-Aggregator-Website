@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Rebates - Backend{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Rebate credits</h1>
+    <p class="muted">Rebates are granted after a slot, never at booking. An open credit is applied
+      automatically against the buyer's next booking with the same email address.</p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('admin_dashboard') }}">&larr; Backend</a>
+</div>
+
+{% set open = rows|selectattr('status', 'equalto', 'AVAILABLE')|list %}
+<div class="kpis">
+  <div class="kpi card"><span>Credits issued</span><strong>{{ rows|length }}</strong></div>
+  <div class="kpi card"><span>Open credit</span>
+    <strong>{{ fmt_inr(open|sum(attribute='amount'), 0) }}</strong></div>
+  <div class="kpi card"><span>Redeemed</span>
+    <strong>{{ rows|selectattr('status', 'equalto', 'APPLIED')|list|length }}</strong></div>
+</div>
+
+<table class="table">
+  <thead><tr><th>#</th><th>Buyer</th><th>Email</th><th>Source order</th><th>%</th><th>Amount</th><th>Status</th><th>Granted</th><th>Note</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ r['id'] }}</td>
+      <td><strong>{{ r['company'] }}</strong></td>
+      <td class="muted small mono">{{ r['email'] or '-' }}</td>
+      <td><a href="{{ url_for('admin_booking_detail', booking_id=r['booking_id']) }}">#{{ r['booking_id'] }}</a>
+        {% if r['applied_booking_id'] %}<br><span class="small muted">used on #{{ r['applied_booking_id'] }}</span>{% endif %}</td>
+      <td>{{ '%g'|format(r['pct']) }}%</td>
+      <td>{{ fmt_inr(r['amount']) }}</td>
+      <td><span class="badge {{ 'ok' if r['status'] == 'AVAILABLE' else ('info' if r['status'] == 'APPLIED' else 'muted') }}">{{ r['status'] }}</span></td>
+      <td class="muted small">{{ fmt_dt(r['created_at']) }}</td>
+      <td class="muted small">{{ r['note'] or '-' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="muted">No rebates granted yet.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

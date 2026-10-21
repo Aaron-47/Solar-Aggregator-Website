@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Backend - Solar Aggregator{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Backend</h1>
+    <p class="muted">Capacity, orders, waitlists and the audit trail.
+      <span class="live-dot" data-live-stamp>live</span></p>
+  </div>
+  <form method="post" action="{{ url_for('admin_sweep') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost" type="submit">Run maintenance sweep</button>
+  </form>
+</div>
+
+<div class="kpis">
+  <div class="kpi card"><span>Open slots</span><strong>{{ stats['open_offers'] }}</strong></div>
+  <div class="kpi card"><span>Capacity published</span><strong>{{ '%g'|format(stats['total_capacity']) }} MW</strong></div>
+  <div class="kpi card"><span>Capacity blocked</span><strong>{{ '%g'|format(stats['booked_mw']) }} MW</strong></div>
+  <div class="kpi card"><span>Capacity still open</span><strong>{{ '%g'|format(stats['remaining_mw']) }} MW</strong></div>
+  <div class="kpi card"><span>Collected (PAID)</span><strong>{{ fmt_inr(stats['paid'], 0) }}</strong></div>
+  <div class="kpi card"><span>Buyers</span><strong>{{ stats['buyers'] }}</strong></div>
+  <div class="kpi card"><span>Bookings</span><strong>{{ stats['bookings'] }}</strong></div>
+  <div class="kpi card"><span>On waitlists</span><strong>{{ stats['waitlist'] }}</strong></div>
+  <div class="kpi card"><span>Rebate credits open</span><strong>{{ fmt_inr(stats['rebates'], 0) }}</strong></div>
+</div>
+
+{% if to_lock or bank_verify or due %}
+<div class="two-col">
+  {% if to_lock %}
+  <section class="card">
+    <h3>Awaiting price lock ({{ to_lock|length }})</h3>
+    <ul class="plain">
+      {% for r in to_lock %}
+      <li><a href="{{ url_for('admin_booking_detail', booking_id=r['id']) }}">#{{ r['id'] }}</a>
+        &middot; {{ r['company'] }} &middot; {{ '%g'|format(r['total_mw']) }} MW &middot; <span class="muted">{{ r['title'] }}</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if bank_verify %}
+  <section class="card">
+    <h3>Bank transfers to verify ({{ bank_verify|length }})</h3>
+    <ul class="plain">
+      {% for r in bank_verify %}
+      <li><a href="{{ url_for('admin_booking_detail', booking_id=r['id']) }}">#{{ r['id'] }}</a>
+        &middot; {{ r['company'] }} &middot; <span class="mono small">{{ r['payment_ref'] }}</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if due %}
+  <section class="card">
+    <h3>Debits due ({{ due|length }})</h3>
+    <ul class="plain">
+      {% for r in due %}
+      <li><a href="{{ url_for('admin_booking_detail', booking_id=r['id']) }}">#{{ r['id'] }}</a>
+        &middot; {{ r['company'] }} &middot; {{ fmt_inr(r['amount']) }} &middot; slot {{ fmt_dt(r['delivery_date'], false) }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+
+<h2 class="section-title">Slots &mdash; live capacity</h2>
+<table class="table">
+  <thead><tr><th>Slot</th><th>Supplier</th><th>Capacity</th><th>Blocked</th><th>Open</th><th>Price</th><th>Cut-off</th><th>Waitlist</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for o in offers %}
+    {% set s = states[o['id']] %}
+    <tr>
+      <td><strong>{{ o['title'] }}</strong><br><span class="muted small">{{ o['sku'] }}</span></td>
+      <td><span class="badge tier">{{ s['tier'] }}</span></td>
+      <td>{{ '%g'|format(s['capacity_mw']) }} MW</td>
+      <td style="min-width:140px">
+        <div class="bar"><div data-offer="{{ o['id'] }}" data-live="bar" style="width: {{ s['pct'] }}%"></div></div>
+        <span class="small muted"><span data-offer="{{ o['id'] }}" data-live="booked">{{ '%g'|format(s['booked_mw']) }}</span> MW
+          (<span data-offer="{{ o['id'] }}" data-live="pct">{{ '%.0f'|format(s['pct']) }}</span>%)</span>
+      </td>
+      <td><strong><span data-offer="{{ o['id'] }}" data-live="remaining">{{ '%g'|format(s['remaining_mw']) }}</span> MW</strong></td>
+      <td><span data-offer="{{ o['id'] }}" data-live="price">{{ '%.2f'|format(s['price']) }}</span> &#8377;/W
+        {% if s['discount_pct'] %}<br><span class="small muted">-{{ '%g'|format(s['discount_pct']) }}% volume</span>{% endif %}</td>
+      <td>{{ fmt_dt(o['cutoff_date'], false) }}</td>
+      <td><span data-offer="{{ o['id'] }}" data-live="waitlist">{{ s['waitlist'] }}</span></td>
+      <td><span class="badge {{ 'open' if o['status'] == 'open' else 'muted' }}">{{ o['status'] }}</span></td>
+      <td><a class="btn btn-ghost btn-sm" href="{{ url_for('admin_offer_edit', offer_id=o['id']) }}">Edit</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if waitlist %}
+<h2 class="section-title">Waitlist ({{ waitlist|length }})</h2>
+<table class="table">
+  <thead><tr><th>Buyer</th><th>Slot</th><th>MW</th><th>Contact</th><th>Joined</th><th></th></tr></thead>
+  <tbody>
+  {% for w in waitlist %}
+    <tr>
+      <td><strong>{{ w['company'] }}</strong><br><span class="muted small">{{ w['email'] }}</span></td>
+      <td class="muted small">{{ w['title'] }}</td>
+      <td>{{ '%g'|format(w['mw']) }}</td>
+      <td class="small">{{ w['contact'] }}{% if w['phone'] %} &middot; {{ w['phone'] }}{% endif %}</td>
+      <td class="muted small">{{ fmt_dt(w['created_at']) }}</td>
+      <td><a class="btn btn-ghost btn-sm" href="{{ url_for('admin_waitlist') }}">Manage</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<h2 class="section-title">Latest bookings</h2>
+{% if recent %}
+<table class="table">
+  <thead><tr><th>#</th><th>Buyer</th><th>Slot</th><th>MW</th><th>Value</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for b in recent %}
+    <tr>
+      <td>{{ b['id'] }}</td>
+      <td><strong>{{ b['company'] }}</strong></td>
+      <td class="muted small">{{ b['title'] }}</td>
+      <td>{{ '%g'|format(b['total_mw']) }}</td>
+      <td>{{ fmt_inr(b['amount']) if b['amount'] else '-' }}
+        {% if b['rebate_applied'] %}<br><span class="badge info">rebate {{ fmt_inr(b['rebate_applied']) }}</span>{% endif %}</td>
+      <td><span class="badge {{ status_tone(b['status']) }}">{{ status_label(b['status']) }}</span></td>
+      <td><a class="btn btn-ghost btn-sm" href="{{ url_for('admin_booking_detail', booking_id=b['id']) }}">Open</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No bookings yet.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='live.js') }}"></script>
+{% endblock %}

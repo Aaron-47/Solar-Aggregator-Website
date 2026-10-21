@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Offers - Backend{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Slot offers</h1>
+  <a class="btn btn-primary" href="{{ url_for('admin_offer_new') }}">+ New slot offer</a>
+</div>
+
+<table class="table">
+  <thead><tr><th>#</th><th>Slot</th><th>Supplier</th><th>Capacity</th><th>Blocked</th><th>Open</th><th>Price</th><th>Rebate</th><th>Restocking fee</th><th>Cut-off</th><th>Delivery</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for o in offers %}
+    {% set s = states[o['id']] %}
+    <tr>
+      <td>{{ o['id'] }}</td>
+      <td><strong>{{ o['title'] }}</strong><br><span class="muted small">{{ o['sku'] }}</span></td>
+      <td><span class="badge tier">{{ s['tier'] }}</span></td>
+      <td>{{ '%g'|format(s['capacity_mw']) }} MW</td>
+      <td style="min-width:130px">
+        <div class="bar"><div style="width: {{ s['pct'] }}%"></div></div>
+        <span class="small muted">{{ '%g'|format(s['booked_mw']) }} MW</span>
+      </td>
+      <td><strong>{{ '%g'|format(s['remaining_mw']) }} MW</strong>
+        {% if s['full'] %}<span class="badge bad">full</span>{% endif %}</td>
+      <td>{{ '%.2f'|format(o['price_per_watt']) }} &#8377;/W
+        {% if s['discount_pct'] %}<br><span class="small muted">now {{ '%.2f'|format(s['price']) }}</span>{% endif %}</td>
+      <td>{{ '%g'|format(o['rebate_pct']) }}%</td>
+      <td>{{ '%g'|format(o['restocking_fee_pct']) }}% / {{ o['penalty_days'] }}d</td>
+      <td>{{ fmt_dt(o['cutoff_date'], false) }}</td>
+      <td>{{ fmt_dt(o['delivery_date'], false) }}</td>
+      <td><span class="badge {{ 'open' if o['status'] == 'open' else 'muted' }}">{{ o['status'] }}</span></td>
+      <td>
+        <a class="btn btn-ghost btn-sm" href="{{ url_for('admin_offer_edit', offer_id=o['id']) }}">Edit</a>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="13" class="muted">No offers yet - create the first slot.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<p class="small muted">Supplier classes: {% for t in ['Tier 1', 'Tier 2'] %}{{ tier_label(t) }}{% if not loop.last %}; {% endif %}{% endfor %}.
+  Brand names are never published.</p>
+{% endblock %}

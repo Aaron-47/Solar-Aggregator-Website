@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}All orders - Backend{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>All orders</h1>
+  <span class="muted">{{ rows|length }} booking{{ 's' if rows|length != 1 }}</span>
+</div>
+
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search company, email, slot or #id">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for s in ['PENDING_BLOCK','CONFIRMED_BLOCKED','AWAITING_BANK_VERIFY','PAYMENT_DUE','PAID','FULFILLED','BLOCK_FAILED','PAYMENT_FAILED','BLOCK_EXPIRED','CANCELLED'] %}
+      <option value="{{ s }}" {{ 'selected' if f_status == s else '' }}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <select name="offer">
+    <option value="">All slots</option>
+    {% for o in offers %}
+      <option value="{{ o['id'] }}" {{ 'selected' if f_offer == o['id']|string else '' }}>{{ o['title'] }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-ghost" type="submit">Filter</button>
+  {% if f_status or f_offer or q %}
+    <a class="btn btn-ghost" href="{{ url_for('admin_bookings') }}">Clear</a>
+  {% endif %}
+</form>
+
+<table class="table">
+  <thead>
+    <tr><th>#</th><th>Buyer</th><th>Slot</th><th>Requirement</th><th>MW</th><th>Value &middot; rebate</th><th>Payment</th><th>Status</th><th>Booked</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for b in rows %}
+    <tr>
+      <td>{{ b['id'] }}</td>
+      <td><strong>{{ b['company'] }}</strong><br><span class="muted small">{{ b['contact'] }} &middot; {{ b['email'] }}</span></td>
+      <td class="muted small">{{ b['title'] }}</td>
+      <td class="small">{{ '%g'|format(b['total_mw']) }} MW
+        {% if b['payment_mode'] == 'bank' %}<span class="badge muted">bank</span>{% endif %}</td>
+      <td>{{ '%g'|format(b['total_mw']) }}</td>
+      <td>{{ fmt_inr(b['amount']) if b['amount'] else '-' }}
+        {% if b['rebate_applied'] %}<br><span class="badge info">rebate -{{ fmt_inr(b['rebate_applied']) }}</span>{% endif %}
+        {% if b['restocking_fee'] %}<br><span class="badge warn">fee {{ fmt_inr(b['restocking_fee']) }}</span>{% endif %}</td>
+      <td class="small">
+        {% if b['status'] == 'AWAITING_BANK_VERIFY' %}<span class="badge warn">verify</span>
+        {% elif b['status'] == 'PAYMENT_DUE' %}<span class="badge warn">debit due</span>
+        {% elif b['status'] in ('PAID','FULFILLED') %}<span class="badge ok">received</span>
+        {% else %}-{% endif %}
+      </td>
+      <td><span class="badge {{ status_tone(b['status']) }}">{{ status_label(b['status']) }}</span></td>
+      <td class="muted small">{{ fmt_dt(b['created_at']) }}</td>
+      <td><a class="btn btn-ghost btn-sm" href="{{ url_for('admin_booking_detail', booking_id=b['id']) }}">Open</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="10" class="muted">No bookings match this filter.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

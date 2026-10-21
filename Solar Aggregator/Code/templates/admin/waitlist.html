@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Waitlist - Backend{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Waitlist</h1>
+    <p class="muted">Buyers queued for slots that are full. Converting an entry creates a booking
+      and reserves the capacity; the buyer gets a tracking link.</p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('admin_dashboard') }}">&larr; Backend</a>
+</div>
+
+{% if rows %}
+<table class="table">
+  <thead><tr><th>#</th><th>Buyer</th><th>Slot</th><th>MW</th><th>Contact</th><th>Joined</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for w in rows %}
+    {% set s = states.get(w['offer_id']) %}
+    <tr>
+      <td>{{ w['id'] }}</td>
+      <td><strong>{{ w['company'] }}</strong><br><span class="muted small">{{ w['email'] }}</span></td>
+      <td class="muted small">{{ w['title'] }}
+        {% if s %}<br><span class="small muted">{{ '%g'|format(s['remaining_mw']) }} MW open of {{ '%g'|format(s['capacity_mw']) }} MW</span>{% endif %}</td>
+      <td>{{ '%g'|format(w['mw']) }}</td>
+      <td class="small">{{ w['contact'] }}{% if w['phone'] %} &middot; {{ w['phone'] }}{% endif %}
+        {% if w['notes'] %}<br><span class="muted small">{{ w['notes'] }}</span>{% endif %}</td>
+      <td class="muted small">{{ fmt_dt(w['created_at']) }}</td>
+      <td><span class="badge {{ 'ok' if w['status'] == 'CONVERTED' else ('muted' if w['status'] == 'CANCELLED' else 'warn') }}">{{ w['status'] }}</span></td>
+      <td>
+        {% if w['status'] in ('WAITING','OFFERED') %}
+          {% if s and s['remaining_mw'] < w['mw'] %}
+            <span class="muted small">No capacity left in this slot - release MW or wait for a cancellation.</span>
+          {% else %}
+          <form method="post" action="{{ url_for('admin_waitlist_convert', entry_id=w['id']) }}" style="display:inline"
+                onsubmit="return confirm('Create a booking for this waitlist entry and reserve the capacity?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-primary btn-sm" type="submit">Convert</button>
+          </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('admin_waitlist_remove', entry_id=w['id']) }}" style="display:inline"
+                onsubmit="return confirm('Remove this waitlist entry?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-danger btn-sm" type="submit">Remove</button>
+          </form>
+        {% elif w['status'] == 'CONVERTED' %}
+          <a class="btn btn-ghost btn-sm" href="{{ url_for('admin_booking_detail', booking_id=w['converted_booking_id']) }}">Booking #{{ w['converted_booking_id'] }}</a>
+        {% else %}
+          <span class="muted small">closed</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">Nobody is waiting. Waitlist entries appear here as soon as a buyer queues for a full slot.</p>
+{% endif %}
+{% endblock %}
